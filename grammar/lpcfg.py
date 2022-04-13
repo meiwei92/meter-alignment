@@ -4,8 +4,9 @@ import argparse
 from typing import *
 from pathlib import Path
 from parsing import MidiFileParser, KernFileParser, NoteBFileParser, FileParser
-from model.meter import MeterModel, MeterGrammarModel
-from metric.base import TimePointSequence, MusicNote
+from model.base import MidiModel
+from model.meter import MeterModel, MeterGrammarModel, TatumTrackingModelState
+from metric.base import TimePointSequence, MusicNote, Tatum, TimeSignature
 
 """ 
 List defines the supported formats that are available to save the resulting grammar file
@@ -36,10 +37,55 @@ class Grammar:
     """
 
     def __init__(self) -> None:
-        super().__init__()
+        super(Grammar, self).__init__()
 
     def serialize(self):
         pass
+
+    @staticmethod
+    def generate_from(model: MeterModel, sequence: TimePointSequence):
+        tatum_states: List[TatumTrackingModelState] = model.get_tatum_hypotheses()
+        tatums: List[Tatum] = tatum_states[0].tatums
+
+        measure_offset: int = tatums[0].measure
+        number_of_measures: int = tatums[-1].measure - measure_offset + 1
+
+        t_signature = sequence.get_timesignature_for_timepoint()
+        beats_per_measure, subbeat_per_measure, tatums_per_measure = Grammar.time_signature_values()
+        bpm_list: List[int] = []
+        sbpm_list: List[int] = []
+        tpm_list: List[int] = []
+        idx = 0
+
+        while idx < len(tatums):
+            t: Tatum = tatums[idx]
+
+            beats_per_measure, subbeat_per_measure, tatums_per_measure = Grammar.time_signature_values()
+            if sequence.get_subbeat_length() >= 0:
+                tatums_per_measure = sequence.get_subbeat_length() * beats_per_measure * subbeat_per_measure
+
+            m: int = t.measure - measure_offset
+            bpm_list[m] = beats_per_measure
+            sbpm_list[m] = subbeat_per_measure
+            tpm_list[m] = tatums_per_measure
+
+            idx += tatums_per_measure - tatums[idx].tatum
+
+        pass
+
+    @staticmethod
+    def time_signature_values(signature: TimeSignature = None, tatum_denominator: int = 32):
+        if signature is None:
+            return 0, 0, 0
+
+        bpm = signature.beats_per_measure
+        sbpb = 2
+
+        if bpm > 3 and bpm % 3 == 0:
+            bpm /= 3
+            sbpb = 3
+
+        return bpm, sbpb, signature.get_tatums_per_measure(tatum_denominator=tatum_denominator)
 
 
 class GrammarGenerator:
@@ -151,10 +197,11 @@ class GrammarGenerator:
                 if len(notes) > 0:
                     model.transition(notes=notes)
                 current_tp = current_tp.get_next()
+            model.close()
 
         # with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
         #     executor.map()
-        result_grammar = Grammar()
+        result_grammar = Grammar.generate_from(model=model, sequence=time_point_sequence)
         return result_grammar
 
     @staticmethod
@@ -230,12 +277,6 @@ def create_argument_parser() -> argparse.ArgumentParser:
 
 
 if __name__ == "__main__":
-
-    # _perf = ptt.load_performance_midi("../data/corpora/WTCInv/invent1.mid")
-    # _perf = ptt.load_performance_midi("../data/corpora/WTCInv/bach-0867-fugue.mid")
-    # _score = ptt.load_score_midi("../data/corpora/WTCInv/invent1.mid")
-    # _score = ptt.load_score_midi("../data/corpora/WTCInv/bach-0867-fugue.mid")
-    # print("Loaded")
     parser = create_argument_parser()
     args = vars(parser.parse_args(sys.argv[1:]))
 

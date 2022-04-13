@@ -78,6 +78,15 @@ class MeterModel(MidiModel):
     def get_hypotheses(self) -> OrderedDictType[MidiModelState, None]:
         pass
 
+    def get_tatum_hypotheses(self) -> List[TatumTrackingModelState]:
+        tatum_hypotheses = []
+
+        for mms in self.hypothesis_states:
+            tatum_hypotheses.append(mms.tatum_tracking_state)
+
+        return tatum_hypotheses
+
+
 
 class MeterGrammarModel(MeterModel):
     def __init__(self, sequence: TimePointSequence, beam_size: int = 200):
