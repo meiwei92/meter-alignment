@@ -1,11 +1,10 @@
-from base.error import (
+from basic.error import (
     ConflictingValuesError,
     MissingValuesError,
     InvalidFormatError
 )
 
-from base.utils import (
+from basic.utils import (
     default,
-    relu,
-    JsonReprObject
+    relu
 )

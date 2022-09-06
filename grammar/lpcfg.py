@@ -3,10 +3,10 @@ import argparse
 
 from typing import *
 from pathlib import Path
-from parsing import MidiFileParser, KernFileParser, NoteBFileParser, FileParser
-from model.base import MidiModel
-from model.meter import MeterModel, MeterGrammarModel, TatumTrackingModelState
-from metric.base import TimePointSequence, MusicNote, Tatum, TimeSignature
+from parsing import MidiFileParser, KernFileParser, NoteBFileParser
+import model.meter as model_meter
+import metric
+from grammar.base import LpcfgVoice
 
 """ 
 List defines the supported formats that are available to save the resulting grammar file
@@ -43,49 +43,10 @@ class Grammar:
         pass
 
     @staticmethod
-    def generate_from(model: MeterModel, sequence: TimePointSequence):
-        tatum_states: List[TatumTrackingModelState] = model.get_tatum_hypotheses()
-        tatums: List[Tatum] = tatum_states[0].tatums
+    def generate_from(model: model_meter.MeterModel, sequence: metric.TimePointSequence, min_note_length: int = -1):
+        lpcfg_voices = LpcfgVoice.generate_from(model, sequence, min_note_length)
 
-        measure_offset: int = tatums[0].measure
-        number_of_measures: int = tatums[-1].measure - measure_offset + 1
 
-        t_signature = sequence.get_timesignature_for_timepoint()
-        beats_per_measure, subbeat_per_measure, tatums_per_measure = Grammar.time_signature_values()
-        bpm_list: List[int] = []
-        sbpm_list: List[int] = []
-        tpm_list: List[int] = []
-        idx = 0
-
-        while idx < len(tatums):
-            t: Tatum = tatums[idx]
-
-            beats_per_measure, subbeat_per_measure, tatums_per_measure = Grammar.time_signature_values()
-            if sequence.get_subbeat_length() >= 0:
-                tatums_per_measure = sequence.get_subbeat_length() * beats_per_measure * subbeat_per_measure
-
-            m: int = t.measure - measure_offset
-            bpm_list[m] = beats_per_measure
-            sbpm_list[m] = subbeat_per_measure
-            tpm_list[m] = tatums_per_measure
-
-            idx += tatums_per_measure - tatums[idx].tatum
-
-        pass
-
-    @staticmethod
-    def time_signature_values(signature: TimeSignature = None, tatum_denominator: int = 32):
-        if signature is None:
-            return 0, 0, 0
-
-        bpm = signature.beats_per_measure
-        sbpb = 2
-
-        if bpm > 3 and bpm % 3 == 0:
-            bpm /= 3
-            sbpb = 3
-
-        return bpm, sbpb, signature.get_tatums_per_measure(tatum_denominator=tatum_denominator)
 
 
 class GrammarGenerator:
@@ -188,12 +149,12 @@ class GrammarGenerator:
             parser = parser_type(file=mfile, anacrusis_length=anacrusis_length,
                                  use_channel=self.use_channel, verbose=self.verbose,
                                  subbeat_length=self.subbeat_length, min_note_length=self.min_note_length)
-            time_point_sequence: TimePointSequence = parser.parse()
-            model: MeterModel = MeterGrammarModel(time_point_sequence)
+            time_point_sequence: metric.TimePointSequence = parser.parse()
+            model: model_meter.MeterModel = model_meter.MeterGrammarModel(time_point_sequence)
 
             current_tp = time_point_sequence.first_point
             while current_tp.get_next() is not None:
-                notes: List[MusicNote] = time_point_sequence.get_concated_note_list(timepoint=current_tp)
+                notes: List[metric.MusicNote] = time_point_sequence.get_concated_note_list(timepoint=current_tp)
                 if len(notes) > 0:
                     model.transition(notes=notes)
                 current_tp = current_tp.get_next()
@@ -201,7 +162,8 @@ class GrammarGenerator:
 
         # with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
         #     executor.map()
-        result_grammar = Grammar.generate_from(model=model, sequence=time_point_sequence)
+        result_grammar = Grammar.generate_from(model=model, sequence=time_point_sequence,
+                                               min_note_length=self.min_note_length)
         return result_grammar
 
     @staticmethod

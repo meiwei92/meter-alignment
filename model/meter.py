@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import List, Tuple, OrderedDict as OrderedDictType, DefaultDict, Optional
 from collections import OrderedDict, defaultdict
 
-from metric import MusicNote, TimePointSequence
+import metric
 from model.base import MidiModel, MidiModelState
 from model.beat import TatumTrackingModelState, TatumTrackingGrammarModelState
 from model.voice import VoiceSplittingModelState, VoiceSplittingGrammarModelState
@@ -11,7 +11,7 @@ from model.hierarchy import HierarchyModelState, HierarchyGrammarModelState
 
 class MeterModel(MidiModel):
     new_voice_states: DefaultDict[VoiceSplittingModelState, List[VoiceSplittingModelState]]
-    new_tatum_states: DefaultDict[TatumTrackingModelState, DefaultDict[Tuple[MusicNote], List[TatumTrackingModelState]]]
+    new_tatum_states: DefaultDict[TatumTrackingModelState, DefaultDict[Tuple[metric.MusicNote], List[TatumTrackingModelState]]]
 
     def __init__(self, hierarchy_state: HierarchyModelState = None,
                  voice_state: VoiceSplittingModelState = None,
@@ -38,13 +38,13 @@ class MeterModel(MidiModel):
     def is_beam_full(self) -> bool:
         return (not self.beam_size <= -1) and (len(self.started_states) >= self.beam_size)
 
-    def transition(self, notes: List[MusicNote] = None) -> OrderedDictType[MeterModelState]:
+    def transition(self, notes: List[metric.MusicNote] = None) -> OrderedDictType[MeterModelState]:
         return self.__transition_close_worker(notes=notes, none_as_close=False)
 
     def close(self) -> OrderedDictType[MeterModelState]:
         return self.__transition_close_worker(notes=None, none_as_close=True)
 
-    def __transition_close_worker(self, notes: List[MusicNote] = None, none_as_close=False) -> OrderedDictType[MeterModelState]:
+    def __transition_close_worker(self, notes: List[metric.MusicNote] = None, none_as_close=False) -> OrderedDictType[MeterModelState]:
         new_states: OrderedDict[MeterModelState, None] = OrderedDict()
         do_close = (notes is None and none_as_close)
 
@@ -86,10 +86,18 @@ class MeterModel(MidiModel):
 
         return tatum_hypotheses
 
+    def get_voice_hypotheses(self) -> List[VoiceSplittingModelState]:
+        voice_hypotheses = []
+
+        for mms in self.hypothesis_states:
+            voice_hypotheses.append(mms.voice_splitting_state)
+
+        return voice_hypotheses
+
 
 
 class MeterGrammarModel(MeterModel):
-    def __init__(self, sequence: TimePointSequence, beam_size: int = 200):
+    def __init__(self, sequence: metric.TimePointSequence, beam_size: int = 200):
         hs: HierarchyModelState = HierarchyGrammarModelState(sequence=sequence)
         vs: VoiceSplittingModelState = VoiceSplittingGrammarModelState(sequence=sequence)
         ts: TatumTrackingModelState = TatumTrackingGrammarModelState(sequence=sequence)
@@ -98,7 +106,7 @@ class MeterGrammarModel(MeterModel):
 
 
 class MeterPredictionModel(MeterModel):
-    def __init__(self, sequence: TimePointSequence, beam_size: int = 200):
+    def __init__(self, sequence: metric.TimePointSequence, beam_size: int = 200):
         super(MeterPredictionModel, self).__init__(beam_size=beam_size)
         pass
 
@@ -140,13 +148,13 @@ class MeterModelState(MidiModelState):
     def set_hierarchy_state(self, state: HierarchyModelState):
         self.hierarchy_state = state
 
-    def transition(self, notes: List[MusicNote] = None) -> OrderedDictType[MeterModelState]:
+    def transition(self, notes: List[metric.MusicNote] = None) -> OrderedDictType[MeterModelState]:
         return self.__transition_close_worker(notes=notes, none_as_close=False)
 
     def close(self) -> OrderedDictType[MeterModelState]:
         return self.__transition_close_worker(notes=None, none_as_close=True)
 
-    def __transition_close_worker(self, notes: List[MusicNote] = None, none_as_close=False) -> OrderedDictType[MeterModelState, None]:
+    def __transition_close_worker(self, notes: List[metric.MusicNote] = None, none_as_close=False) -> OrderedDictType[MeterModelState, None]:
         new_state: OrderedDictType[MeterModelState, None] = OrderedDict()
         do_close = (notes is None and none_as_close)
 
@@ -189,7 +197,7 @@ class MeterModelState(MidiModelState):
                 nts = [*nts.keys()]
                 new_tatum_states.append(nts)
             else:
-                new_notes: List[MusicNote] = []
+                new_notes: List[metric.MusicNote] = []
                 for n in notes:
                     if self.voice_splitting_state.keep_note(n):
                         new_notes.append(n)

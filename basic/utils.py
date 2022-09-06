@@ -1,4 +1,4 @@
-import jsonpickle
+
 from typing import *
 
 
@@ -18,8 +18,8 @@ def relu(value: float) -> float:
     else:
         return 0.0
 
-
-class JsonReprObject(object):
-
-    def __repr__(self) -> str:
-        return super().__repr__()
+#
+# class JsonReprObject(object):
+#
+#     def __repr__(self) -> str:
+#         return super().__repr__()

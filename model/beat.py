@@ -4,8 +4,7 @@ from abc import ABC
 from collections import OrderedDict
 from typing import List, OrderedDict as OrderedDictType
 
-from metric import MusicNote, TimePointSequence, Tatum
-
+import metric
 import model.base as base_model
 import model.hierarchy as hierarchy_model
 
@@ -16,7 +15,7 @@ class TatumTrackingModelState(base_model.MidiModelState, ABC):
     """
     def __init__(self) -> None:
         super(TatumTrackingModelState).__init__()
-        self.tatums: List[Tatum] = []
+        self.tatums: List[metric.Tatum] = []
         self.tatum_times: List[float] = []
         self.hierarchy_state = None
 
@@ -45,12 +44,12 @@ class TatumTrackingModelState(base_model.MidiModelState, ABC):
 
 
 class TatumTrackingGrammarModelState(TatumTrackingModelState):
-    def __init__(self, sequence: TimePointSequence = None, state: TatumTrackingGrammarModelState = None) -> None:
+    def __init__(self, sequence: metric.TimePointSequence = None, state: TatumTrackingGrammarModelState = None) -> None:
         super(TatumTrackingGrammarModelState).__init__()
 
         if sequence is not None:
             self.timepoint_sequence = sequence
-            self.tatums: List[Tatum] = sequence.get_tatums()
+            self.tatums: List[metric.Tatum] = sequence.get_tatums()
             self.tatum_times: List[float] = []
 
             for t in self.tatums:
@@ -72,7 +71,7 @@ class TatumTrackingGrammarModelState(TatumTrackingModelState):
     def get_score(self) -> float:
         return 0.0
 
-    def transition(self, notes: List[MusicNote] = None) -> OrderedDictType[base_model.MidiModelState]:
+    def transition(self, notes: List[metric.MusicNote] = None) -> OrderedDictType[base_model.MidiModelState]:
         new_state: OrderedDictType[TatumTrackingGrammarModelState, None] = OrderedDict()
         if notes is not None and len(notes) > 0:
             self.most_recent_time = notes[0].get_start_point().get_time_at_tick()
@@ -97,7 +96,7 @@ class TatumTrackingGrammarModelState(TatumTrackingModelState):
 
     def get_measure_count(self) -> int:
         recent_tatum_idx = min(self.most_recent_idx, len(self.tatums) - 1)
-        recent_tatum: Tatum = self.tatums[recent_tatum_idx]
+        recent_tatum: metric.Tatum = self.tatums[recent_tatum_idx]
         return recent_tatum.measure
 
     def get_current_tatum_times(self) -> List[float]:

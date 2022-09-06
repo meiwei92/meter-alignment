@@ -7,7 +7,7 @@ from partitura.score import (
 )
 from pathlib import Path
 from parsing import FileParser
-from base import *
+from basic import *
 from metric import *
 from typing import *
 import numpy as np
@@ -22,7 +22,7 @@ class MidiFileParser(FileParser):
                  subbeat_length: int = 4, min_note_length: int = 100000) -> None:
         super().__init__(file, anacrusis_length, use_channel, verbose, subbeat_length, min_note_length)
 
-        self.sequence: TimePointSequence = TimePointSequence(subbeat_length)
+        self.sequence: TimePointSequence = TimePointSequence(subbeat_length=subbeat_length, anacrusis_length=anacrusis_length)
         self.notes = list()
 
     def parse(self) -> TimePointSequence:

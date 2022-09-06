@@ -2,10 +2,13 @@ from __future__ import annotations
 
 from collections import defaultdict
 from typing import *
-from base import *
+
+import metric
+from basic import ConflictingValuesError, relu, default
+from enum import Enum
 
 
-class MetricalMeasure(JsonReprObject):
+class MetricalMeasure:
     def __init__(self, beats_per_measure: int, subbeats_per_beat: int,
                  length: int = 0, anacrusis: int = 0) -> None:
         super().__init__()
@@ -35,7 +38,7 @@ class MetricalMeasure(JsonReprObject):
             bpm = bpm / 3
             subbeats_per_beat = 3
 
-        tatums_per_measure = timesignature.get_tatums_per_measure(tatum_denominatior=tatums_denominator)
+        tatums_per_measure = timesignature.get_tatums_per_measure(tatum_denominator=tatums_denominator)
         length = int(tatums_per_measure / bpm / subbeats_per_beat)
 
         return MetricalMeasure(beats_per_measure=bpm, subbeats_per_beat=subbeats_per_beat, length=length)
@@ -56,7 +59,7 @@ class MetricalMeasure(JsonReprObject):
         return measure
 
 
-class Tatum(JsonReprObject):
+class Tatum:
     def __init__(self, tatum: int = 0, measure: int = 0, time: float = 0, tick: int = 0) -> None:
         super().__init__()
         self.tatum: int = tatum
@@ -77,7 +80,7 @@ class Tatum(JsonReprObject):
         return self.tick
 
 
-class Voice(JsonReprObject):
+class Voice:
     def __init__(self, current_note: MusicNote, prev_voice: Voice = None):
         self.notes: List[MusicNote] = []
         self.prev: Voice = prev_voice
@@ -86,10 +89,9 @@ class Voice(JsonReprObject):
         self.first_note_time = current_note.get_start_point().get_time_at_tick()
         if self.prev is not None:
             self.first_note_time = self.prev.first_note_time
-            self.notes.extend(self.prev.notes)
+            self.notes.extend(self.prev.get_notes())
 
         self.notes.append(current_note)
-
 
     def get_previous(self) -> Optional[Voice]:
         return self.prev
@@ -97,8 +99,11 @@ class Voice(JsonReprObject):
     def get_most_recent_note(self) -> Optional[MusicNote]:
         return self.most_recent_note
 
+    def get_notes(self) -> List[MusicNote]:
+        return self.notes
 
-class MusicNote(JsonReprObject):
+
+class MusicNote:
     def __init__(self, start_tick: int, end_tick: int,
                  velocity: int, pitch: int,
                  track: int, channel: int):
@@ -117,11 +122,17 @@ class MusicNote(JsonReprObject):
     def get_start_point(self) -> TimePoint:
         return self.start_point
 
+    def get_start_time(self):
+        return None if self.get_start_point() is None else self.get_start_point().get_time_at_tick()
+
     def set_end_point(self, tp: TimePoint) -> NoReturn:
         self.end_point = tp
 
     def get_end_point(self) -> TimePoint:
         return self.end_point
+
+    def get_end_time(self):
+        return None if self.get_end_point() is None else self.get_end_point().get_time_at_tick()
 
     def get_start_tick(self) -> int:
         return self.start_tick
@@ -141,8 +152,37 @@ class MusicNote(JsonReprObject):
     def get_channel(self) -> int:
         return self.channel
 
+    def get_onset_tatum(self, tatums: List[Tatum]) -> Optional[Tatum]:
+        return self.get_nearest_tatum(time=self.get_start_time(), tatums=tatums)
 
-class Tempo(JsonReprObject):
+    def get_offset_tatum(self, tatums: List[Tatum]) -> Optional[Tatum]:
+        return self.get_nearest_tatum(time=self.get_start_time(), tatums=tatums)
+
+    def get_nearest_tatum(self, time: float, tatums: List[Tatum]) -> Optional[Tatum]:
+        if tatums is None or len(tatums) == 0:
+            return None
+
+        if len(tatums) == 1:
+            return tatums[0]
+
+        middle = int(len(tatums) / 2)
+        left = self.get_nearest_tatum(time=time, tatums=tatums[0:middle])
+        right = self.get_nearest_tatum(time=time, tatums=tatums[middle:-1])
+
+        distance = float('inf')
+        nearest = None
+
+        for tatum in (left, right):
+            if tatum is not None:
+                abs_distance = abs(time - left.get_time())
+                if abs_distance < distance:
+                    distance = abs_distance
+                    nearest = tatum
+
+        return nearest
+
+
+class Tempo:
     __DEFAULT_PPB = 480
     __DEFAULT_BPM = 120
     __DEFAULT_TEMPO = None
@@ -294,7 +334,7 @@ class DefaultTempo(Tempo):
         return True
 
 
-class TimeSignature(JsonReprObject):
+class TimeSignature:
     """
     Defines a TimeSignature in a music piece.
 
@@ -361,11 +401,21 @@ class TimeSignature(JsonReprObject):
     def get_beat_length_denominator(self) -> int:
         return self.beat_length_denominator
 
-    def get_tatums_per_measure(self, tatum_denominatior: int = 32) -> int:
-        return self.beats_per_measure * self.get_tatums_per_measure_beat(tatum_denominatior=tatum_denominatior)
+    def get_tatums_per_measure(self, tatum_denominator: int = 32) -> int:
+        return self.beats_per_measure * self.get_tatums_per_measure_beat(tatum_denominator=tatum_denominator)
 
-    def get_tatums_per_measure_beat(self, tatum_denominatior: int = 32) -> int:
-        return tatum_denominatior / self.beat_length_denominator
+    def get_tatums_per_measure_beat(self, tatum_denominator: int = 32) -> int:
+        return tatum_denominator / self.beat_length_denominator
+
+    def get_subbeats_per_beat(self) -> int:
+        bpm = self.beats_per_measure
+        sbpb = 2
+
+        if bpm > 3 and bpm % 3 == 0:
+            bpm /= 3
+            sbpb = 3
+
+        return sbpb
 
 
 class DefaultTimeSignature(TimeSignature):
@@ -376,12 +426,12 @@ class DefaultTimeSignature(TimeSignature):
         return True
 
 
-class KeySignature(JsonReprObject):
+class KeySignature:
     def __init__(self) -> None:
         super().__init__()
 
 
-class TimePoint(JsonReprObject):
+class TimePoint:
     def __init__(self, previous_point: TimePoint = None, tick: int = None, time_at_tick: float = None) -> NoReturn:
         self.previous_point: TimePoint = previous_point
         self.tick: int = tick
@@ -439,7 +489,7 @@ class TimePoint(JsonReprObject):
         self.previous_point = previous_point
 
 
-class TimePointSequence(JsonReprObject):
+class TimePointSequence:
     timepoint_data: defaultdict[int, defaultdict[Type[Union[None, TimePoint, Tempo, TimeSignature, MusicNote]],
                                                  Union[None, TimePoint, Tempo, TimeSignature, defaultdict]]]
 
@@ -816,20 +866,20 @@ class TimePointSequence(JsonReprObject):
 
     def get_tatums(self) -> List[Tatum]:
         tatums: List[Tatum] = []
-        measure_num, tatum_num, tick, timepoint = -1, 0, 0, self.first_point
+        measure_num, tatum_num, tick, timepoint = -1, -1, 0, self.first_point
         last_tick, prev_tick, prev_time_at_tatum = self.last_point.get_tick(), 0, 0
 
         while timepoint.get_next() is not None and timepoint.get_tick() <= last_tick:
             time_measure_data = self.time_measure_data_of_timepoint(timepoint)
-            tatums_per_measure = time_measure_data['tatums_per_measure']
-            ticks_per_tatum = time_measure_data['ticks_per_tatum']
-            seconds_per_tick = time_measure_data['seconds_per_tick']
+            tatums_per_measure = time_measure_data[metric.TimePointSequence.TimeMeasureData.TATUMS_PER_MEASURE]
+            ticks_per_tatum = time_measure_data[metric.TimePointSequence.TimeMeasureData.TICKS_PER_TATUM]
+            seconds_per_tick = time_measure_data[metric.TimePointSequence.TimeMeasureData.SECONDS_PER_TICK]
 
-            if measure_num < 0:
+            if tatum_num < 0:
                 if self.anacrusis_length > 0:
                     anacrusis_tatums = int(self.anacrusis_length / ticks_per_tatum)
                     tatum_num = tatums_per_measure - anacrusis_tatums
-                    tick = -self.anacrusis_length
+                    # tick = -self.anacrusis_length
                 else:
                     measure_num = 0
 
@@ -855,26 +905,43 @@ class TimePointSequence(JsonReprObject):
 
             timepoint = next_tp
 
-        # todo: possible fix of subbeat length
         return tatums
 
     def time_measure_data_of_timepoint(self, timepoint: TimePoint):
+        if timepoint is None:
+            return None
+
         time_signature = self.get_timesignature_for_timepoint(timepoint)
         tempo = self.get_tempo_for_timepoint(timepoint)
 
         return self.__get_time_measure_data(time_signature, tempo)
 
     def time_measure_data_of_tick(self, tick: int):
+        # tick of anacrusis
+        if tick < 0:
+            point = self.first_point
+            return self.time_measure_data_of_timepoint(timepoint=point)
         time_signature = self.get_timesignature_for_tick(tick)
         tempo = self.get_tempo_for_tick(tick)
 
         return self.__get_time_measure_data(time_signature, tempo)
 
-    @staticmethod
-    def __get_time_measure_data(time_signature: TimeSignature, tempo: Tempo):
-        # @TODO Add support for different tatum denominator, currently only 32th notes supported
-        tatums_per_beat = time_signature.get_tatums_per_measure_beat()
-        tatums_per_measure = time_signature.get_tatums_per_measure()
+    class TimeMeasureData(Enum):
+        TEMPO = 'tempo'
+        TIME_SIGNATURE = 'time_signature'
+        TATUMS_PER_BEAT = 'tatums_per_beat'
+        TATUMS_PER_SUBBEAT = 'tatums_per_subbeat'
+        TATUMS_PER_MEASURE = 'tatums_per_measure'
+        TICKS_PER_BEAT = 'ticks_per_beat'
+        TICKS_PER_TATUM = 'ticks_per_tatum'
+        SECONDS_PER_TICK = 'seconds_per_tick'
+        SECONDS_PER_TATUM = 'seconds_per_tatum'
+
+    def __get_time_measure_data(self, time_signature: TimeSignature, tempo: Tempo):
+        # correct tatums to subbeat structure
+        tatums_per_subbeat = self.subbeat_length
+        tatums_per_beat = tatums_per_subbeat * time_signature.get_subbeats_per_beat()
+        tatums_per_measure = tatums_per_beat * time_signature.get_beats_per_measure()
 
         beat_denominator = time_signature.get_beat_length_denominator()
         ticks_per_beat = tempo.get_puls_per_beat(target_beat_denominator=beat_denominator)
@@ -883,26 +950,27 @@ class TimePointSequence(JsonReprObject):
         seconds_per_tick = tempo.get_seconds_per_tick(target_beat_denominator=beat_denominator)
         seconds_per_tatum = ticks_per_tatum * seconds_per_tick
 
-        return dict(
-            tempo=tempo,
-            time_signature=time_signature,
-            tatums_per_beat=tatums_per_beat,
-            tatums_per_measure=tatums_per_measure,
-            ticks_per_beat=ticks_per_beat,
-            ticks_per_tatum=ticks_per_tatum,
-            seconds_per_tick=seconds_per_tick,
-            seconds_per_tatum=seconds_per_tatum
-        )
+        return {
+                TimePointSequence.TimeMeasureData.TEMPO: tempo,
+                TimePointSequence.TimeMeasureData.TIME_SIGNATURE: time_signature,
+                TimePointSequence.TimeMeasureData.TATUMS_PER_SUBBEAT: tatums_per_subbeat,
+                TimePointSequence.TimeMeasureData.TATUMS_PER_BEAT: tatums_per_beat,
+                TimePointSequence.TimeMeasureData.TATUMS_PER_MEASURE: tatums_per_measure,
+                TimePointSequence.TimeMeasureData.TICKS_PER_BEAT: ticks_per_beat,
+                TimePointSequence.TimeMeasureData.TICKS_PER_TATUM: ticks_per_tatum,
+                TimePointSequence.TimeMeasureData.SECONDS_PER_TICK: seconds_per_tick,
+                TimePointSequence.TimeMeasureData.SECONDS_PER_TATUM: seconds_per_tatum
+                }
 
     def get_subbeat_length(self):
         return self.subbeat_length
 
     def get_anacrusis_subbeats(self, tatum_denominator: int = 32):
         time_measure_data = self.time_measure_data_of_timepoint(self.first_point)
-        first_time_signature = time_measure_data['time_signature']
+        first_time_signature = time_measure_data[TimePointSequence.TimeMeasureData.TIME_SIGNATURE]
 
-        ticks_per_tatum = time_measure_data['ticks_per_tatum']
-        tatums_per_measure = time_measure_data['tatums_per_measure']
+        ticks_per_tatum = time_measure_data[TimePointSequence.TimeMeasureData.TICKS_PER_TATUM]
+        tatums_per_measure = time_measure_data[TimePointSequence.TimeMeasureData.TATUMS_PER_MEASURE]
 
         measure = MetricalMeasure.from_timesignature(timesignature=first_time_signature,
                                                      tatums_denominator=tatum_denominator)

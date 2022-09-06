@@ -3,16 +3,15 @@ from __future__ import annotations
 import copy
 from pympler import asizeof
 from typing import List, OrderedDict as OrderedDictType
-from base import JsonReprObject
 
-from metric import MusicNote
+import metric
 
 
-class MidiModelState(JsonReprObject):
+class MidiModelState:
     def get_score(self) -> float:
         raise NotImplementedError("Method get_score must be implemented!")
 
-    def transition(self, notes: List[MusicNote] = None) -> OrderedDictType[MidiModelState]:
+    def transition(self, notes: List[metric.MusicNote] = None) -> OrderedDictType[MidiModelState]:
         raise NotImplementedError("Method transition must be implemented!")
 
     def close(self) -> OrderedDictType[MidiModelState]:
@@ -25,11 +24,11 @@ class MidiModelState(JsonReprObject):
         raise NotImplementedError("Method is_duplicate_of must be implemented!")
 
 
-class MidiModel(JsonReprObject):
+class MidiModel:
     def __init__(self):
         pass
 
-    def transition(self, notes: List[MusicNote] = None) -> OrderedDictType[MidiModelState]:
+    def transition(self, notes: List[metric.MusicNote] = None) -> OrderedDictType[MidiModelState]:
         raise NotImplementedError("Method transition must be implemented!")
 
     def close(self) -> OrderedDictType[MidiModelState]:

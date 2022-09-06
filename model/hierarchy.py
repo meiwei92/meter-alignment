@@ -4,8 +4,7 @@ from abc import ABC
 from collections import OrderedDict
 from typing import List, OrderedDict as OrderedDictType
 
-from metric import MusicNote, TimePointSequence, MetricalMeasure
-
+import metric
 import model.base as base_model
 import model.beat as beat_model
 import model.voice as voice_model
@@ -38,14 +37,14 @@ class HierarchyModelState(base_model.MidiModelState, ABC):
 
 
 class HierarchyGrammarModelState(HierarchyModelState):
-    def __init__(self, sequence: TimePointSequence = None, measure=None, most_recent_time=None) -> None:
+    def __init__(self, sequence: metric.TimePointSequence = None, measure=None, most_recent_time=None) -> None:
         super(HierarchyGrammarModelState).__init__()
 
         self.timepoint_sequence = sequence
         self.anacrusis_subbeat_length = sequence.get_anacrusis_subbeats()
 
         if measure is None:
-            measure = MetricalMeasure.from_timepoint(timepoint_sequence=sequence,
+            measure = metric.MetricalMeasure.from_timepoint(timepoint_sequence=sequence,
                                                      timepoint=sequence.first_point)
 
         self.measure = measure
@@ -54,7 +53,7 @@ class HierarchyGrammarModelState(HierarchyModelState):
     def get_score(self):
         return 1.0
 
-    def transition(self, notes: List[MusicNote] = None) -> OrderedDictType[base_model.MidiModelState]:
+    def transition(self, notes: List[metric.MusicNote] = None) -> OrderedDictType[base_model.MidiModelState]:
         new_state: OrderedDictType[HierarchyGrammarModelState, None] = OrderedDict()
         if notes is not None and len(notes) > 0:
             self.most_recent_time = notes[0].get_start_point().get_time_at_tick()

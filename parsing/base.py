@@ -1,9 +1,9 @@
 from pathlib import Path
 from metric import TimePointSequence
-from base import JsonReprObject
+# from base import JsonReprObject
 
 
-class FileParser(JsonReprObject):
+class FileParser:
     def __init__(self, file: Path, anacrusis_length: int,
                  use_channel: bool = True, verbose: bool = False,
                  subbeat_length: int = 4, min_note_length: int = 100000) -> None:
